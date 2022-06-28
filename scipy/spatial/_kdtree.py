@@ -2,6 +2,8 @@
 # Released under the scipy license
 import numpy as np
 import warnings
+import math
+from numpy import linalg as la 
 from ._ckdtree import cKDTree, cKDTreeNode
 
 __all__ = ['minkowski_distance_p', 'minkowski_distance',
@@ -9,73 +11,72 @@ __all__ = ['minkowski_distance_p', 'minkowski_distance',
            'Rectangle', 'KDTree']
 
 
-def minkowski_distance_p(x, y, p=2):
-    """Compute the pth power of the L**p distance between two arrays.
-
-    For efficiency, this function computes the L**p distance but does
-    not extract the pth root. If `p` is 1 or infinity, this is equal to
-    the actual L**p distance.
-
+def great_circle_distance(x, y):
+    """
+    compute and return the great-circle distance between two points in sperical coordinates
+    
     Parameters
     ----------
-    x : (M, K) array_like
-        Input array.
-    y : (N, K) array_like
-        Input array.
-    p : float, 1 <= p <= infinity
-        Which Minkowski p-norm to use.
+    r: radius of the sphere, default value is 1
+    x : [r, phi_1, theta_1]
+    y : [r, phi_2, theta_2]
+    , where 0<= phi <=360, -90<= theta <=90
+    Note that phi can be interpreted as the right ascension, 
+    and theta can be considered as declination
+    
+    """
+    
+    # Read values
+    phi_1 = x[1]
+    phi_2 = y[1]
+    theta_1 = x[2]
+    theta_2 = y[2]
+    d_phi = 0
+    
+    # Dealing with warp up at 2pi
+    if((0 <= phi_1, phi_2 <= 180) or (180 <= phi_1, phi_2 <= 360)):
+        d_phi = abs(phi_1 - phi_2)    
+    if((0 <= phi_1<= 180) and (180 < phi_2 <= 360)):
+        d_phi = 360 - phi_2 + phi_1
+    if((0 <= phi_2 <= 180) and (180 < phi_2 <= 360)):
+        d_phi = 360 - phi_1 + phi_2
+    
+    # Convert to radians
+    phi_1 = math.radians(phi_1)
+    phi_2 = math.radians(phi_2)
+    theta_1 = math.radians(theta_1)
+    theta_2 = math.radians(theta_2)
+    d_phi = math.radians(d_phi)
+    
+    
+    # the formula is based on https://en.wikipedia.org/wiki/Great-circle_distance
+    return np.arccos(math.sin(theta_1) * math.sin(theta_2) 
+                     + math.cos(theta_1) * math.cos(theta_2) * math.cos(d_phi))
 
+
+def compute_great_circle_distance(x, y):
+    """
+    Compute the great-circle distances between two arrays 
+    that contain points in spherical coordinates using the 
+    great_circle_distance function defined above.
+    
     Examples
     --------
-    >>> from scipy.spatial import minkowski_distance_p
-    >>> minkowski_distance_p([[0,0],[0,0]], [[1,1],[0,1]])
-    array([2, 1])
+    >>> compute_great_circle_distance([[1,0,0],[1,0,0]], [[1,90,0],[1,180,0]])
+    array([1.5708, 3.1416])
 
     """
     x = np.asarray(x)
     y = np.asarray(y)
 
-    # Find smallest common datatype with float64 (return type of this function) - addresses #10262.
-    # Don't just cast to float64 for complex input case.
-    common_datatype = np.promote_types(np.promote_types(x.dtype, y.dtype), 'float64')
-
-    # Make sure x and y are NumPy arrays of correct datatype.
-    x = x.astype(common_datatype)
-    y = y.astype(common_datatype)
-
-    if p == np.inf:
-        return np.amax(np.abs(y-x), axis=-1)
-    elif p == 1:
-        return np.sum(np.abs(y-x), axis=-1)
-    else:
-        return np.sum(np.abs(y-x)**p, axis=-1)
-
-
-def minkowski_distance(x, y, p=2):
-    """Compute the L**p distance between two arrays.
-
-    Parameters
-    ----------
-    x : (M, K) array_like
-        Input array.
-    y : (N, K) array_like
-        Input array.
-    p : float, 1 <= p <= infinity
-        Which Minkowski p-norm to use.
-
-    Examples
-    --------
-    >>> from scipy.spatial import minkowski_distance
-    >>> minkowski_distance([[0,0],[0,0]], [[1,1],[0,1]])
-    array([ 1.41421356,  1.        ])
-
-    """
-    x = np.asarray(x)
-    y = np.asarray(y)
-    if p == np.inf or p == 1:
-        return minkowski_distance_p(x, y, p)
-    else:
-        return minkowski_distance_p(x, y, p)**(1./p)
+    
+    distances = []
+    i = 0
+    
+    for i in range(len(x)):
+        distances.append(round(great_circle_distance(x[i], y[i]), 4))
+   
+    return distances
 
 
 class Rectangle:
@@ -132,10 +133,7 @@ class Rectangle:
             Input.
 
         """
-        return minkowski_distance(
-            0, np.maximum(0, np.maximum(self.mins-x, x-self.maxes)),
-            p
-        )
+        return compute_great_circle_distance(0, np.maximum(0, np.maximum(self.mins-x, x-self.maxes)))
 
     def max_distance_point(self, x, p=2.):
         """
@@ -149,7 +147,7 @@ class Rectangle:
             Input.
 
         """
-        return minkowski_distance(0, np.maximum(self.maxes-x, x-self.mins), p)
+        return compute_great_circle_distance(0, np.maximum(self.maxes-x, x-self.mins))
 
     def min_distance_rectangle(self, other, p=2.):
         """
@@ -163,11 +161,10 @@ class Rectangle:
             Input.
 
         """
-        return minkowski_distance(
+        return mcompute_great_circle_distance(
             0,
             np.maximum(0, np.maximum(self.mins-other.maxes,
-                                     other.mins-self.maxes)),
-            p
+                                     other.mins-self.maxes))
         )
 
     def max_distance_rectangle(self, other, p=2.):
@@ -182,8 +179,8 @@ class Rectangle:
             Input.
 
         """
-        return minkowski_distance(
-            0, np.maximum(self.maxes-other.mins, other.maxes-self.mins), p)
+        return compute_great_circle_distance(
+            0, np.maximum(self.maxes-other.mins, other.maxes-self.mins))
 
 
 class KDTree(cKDTree):
@@ -889,13 +886,13 @@ def distance_matrix(x, y, p=2, threshold=1000000):
         raise ValueError("x contains %d-dimensional vectors but y contains %d-dimensional vectors" % (k, kk))
 
     if m*n*k <= threshold:
-        return minkowski_distance(x[:,np.newaxis,:],y[np.newaxis,:,:],p)
+        return compute_great_circle_distance(x[:,np.newaxis,:],y[np.newaxis,:,:])
     else:
         result = np.empty((m,n),dtype=float)  # FIXME: figure out the best dtype
         if m < n:
             for i in range(m):
-                result[i,:] = minkowski_distance(x[i],y,p)
+                result[i,:] = mcompute_great_circle_distance(x[i],y)
         else:
             for j in range(n):
-                result[:,j] = minkowski_distance(x,y[j],p)
+                result[:,j] = compute_great_circle_distance(x,y[j])
         return result
