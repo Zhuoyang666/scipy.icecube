@@ -6,7 +6,7 @@ import math
 from numpy import linalg as la 
 from ._ckdtree import cKDTree, cKDTreeNode
 
-__all__ = ['ompute_great_circle_distance', 'great_circle_distance',
+__all__ = ['compute_great_circle_distance', 'great_circle_distance',
            'distance_matrix',
            'Rectangle', 'KDTree']
 
