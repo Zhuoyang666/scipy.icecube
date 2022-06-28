@@ -12,8 +12,8 @@ __all__ = [  # noqa: F822
     'cKDTree',
     'cKDTreeNode',
     'distance_matrix',
-    'minkowski_distance',
-    'minkowski_distance_p',
+    'great_circle_distance',
+    'compute_great_circle_distance',
 ]
 
 
